@@ -1,0 +1,84 @@
+plugins {
+    id 'java'
+    id 'com.github.johnrengelman.shadow' version '7.1.2'
+}
+
+group = 'com.suda'
+version = '1.1.0'
+description = 'AdminActionLogger'
+
+repositories {
+    mavenCentral()
+    
+    // Paper 서버 API 리포지토리
+    maven {
+        url = 'https://repo.papermc.io/repository/maven-public/'
+    }
+    
+    // Spigot 서버 API 리포지토리
+    maven {
+        url = 'https://hub.spigotmc.org/nexus/content/repositories/snapshots/'
+    }
+}
+
+dependencies {
+    // Paper API - 서버 API 버전을 사용 중인 서버 버전에 맞춰 수정하세요
+    compileOnly 'io.papermc.paper:paper-api:1.20.6-R0.1-SNAPSHOT'
+    
+    // 테스트 의존성
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.9.2'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.9.2'
+}
+
+// 자바 버전 설정
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
+// 인코딩 설정
+tasks.withType(JavaCompile) {
+    options.encoding = 'UTF-8'
+}
+
+// Shadow JAR 태스크 설정
+shadowJar {
+    // 아티팩트 이름 설정
+    archiveBaseName.set(project.name)
+    archiveClassifier.set('')
+    archiveVersion.set(project.version.toString())
+    
+    // build/libs에 생성되는 JAR 파일의 이름 설정
+    // 이름 형식: AdminActionLogger-1.1.0.jar
+}
+
+// 기본 JAR 태스크 설정
+jar {
+    // 매니페스트 설정
+    manifest {
+        attributes(
+            'Implementation-Title': project.name,
+            'Implementation-Version': project.version
+        )
+    }
+}
+
+// 리소스 처리 설정 - 변수 대체 활성화
+processResources {
+    // plugin.yml 파일에서 ${version}과 같은 변수를 프로젝트 속성으로 대체
+    filesMatching('plugin.yml') {
+        expand(
+            'version': project.version,
+            'name': project.name,
+            'description': project.description
+        )
+    }
+}
+
+// ShadowJar를 빌드의 기본 태스크로 설정
+assemble.dependsOn shadowJar
+
+// 테스트 태스크 설정
+test {
+    useJUnitPlatform()
+}

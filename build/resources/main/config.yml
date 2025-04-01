@@ -1,0 +1,28 @@
+# CreativeItemLogger 설정 파일
+
+# 로깅 기능 활성화 여부
+enable-logging: true
+
+# 날짜 형식 (Java SimpleDateFormat 패턴)
+date-format: "yyyy-MM-dd HH:mm:ss"
+
+# 로그 발생 시 실행할 명령어 목록
+# 사용 가능한 플레이스홀더:
+# %player% - 플레이어 이름
+# %item% - 아이템 이름
+# %amount% - 아이템 수량
+# %time% - 시간 (위 date-format에서 지정한 형식)
+commands-to-execute:
+  - "discord broadcast **%player%**가 크리에이티브 모드에서 **%item% x%amount%**을(를) 복사했습니다."
+  - "say %player%님이 크리에이티브 모드에서 %item% x%amount%을(를) 복사했습니다."
+  - "broadcast &c[알림] &f%player%님이 크리에이티브 모드에서 &e%item% x%amount%&f을(를) 복사했습니다."
+  
+# 로깅을 적용할 월드 목록 (비워두면 모든 월드 적용)
+worlds:
+  - "world"
+  - "world_creative"
+  
+# 로깅에서 제외할 플레이어 목록 (권한 대신 특정 플레이어 이름으로 제외)
+exempt-players:
+  - "AdminPlayer1"
+  - "AdminPlayer2"
