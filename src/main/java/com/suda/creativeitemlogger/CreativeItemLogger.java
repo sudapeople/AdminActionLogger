@@ -26,10 +26,16 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
 
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.text.SimpleDateFormat;
 import java.util.*;
 
@@ -49,6 +55,13 @@ public class CreativeItemLogger extends JavaPlugin implements Listener {
     private boolean logGameModeChanges;
     private boolean logItemTransfers;
     private boolean logSensitiveCommands;
+    
+    // 플레이어별 로그 관련 필드
+    private boolean playerSpecificLogs;
+    private String playerLogsDirectory;
+    private String playerLogsFilename;
+    private Map<UUID, String> playerNameCache; // UUID와 플레이어 이름 매핑
+    private File playersMappingFile; // UUID와 플레이어 이름 매핑 정보 저장 파일
 
     @Override
     public void onEnable() {
@@ -61,6 +74,9 @@ public class CreativeItemLogger extends JavaPlugin implements Listener {
         // 로그 파일 설정
         setupLogFile();
         
+        // 플레이어 매핑 파일 설정
+        setupPlayerMappingFile();
+        
         // 이벤트 리스너 등록
         getServer().getPluginManager().registerEvents(this, this);
         
@@ -69,6 +85,10 @@ public class CreativeItemLogger extends JavaPlugin implements Listener {
         
         // 인벤토리 추적 초기화
         playerInventories = new HashMap<>();
+        playerNameCache = new HashMap<>();
+        
+        // 플레이어 UUID-이름 매핑 로드
+        loadPlayerMapping();
         
         // 주기적 인벤토리 체크 (1분마다)
         if (detailedLogging && logItemTransfers) {
@@ -84,6 +104,9 @@ public class CreativeItemLogger extends JavaPlugin implements Listener {
         for (Player player : Bukkit.getOnlinePlayers()) {
             if (shouldMonitorPlayer(player)) {
                 savePlayerInventory(player);
+                
+                // 플레이어 매핑 업데이트
+                updatePlayerMapping(player.getUniqueId(), player.getName());
             }
         }
         
@@ -92,6 +115,8 @@ public class CreativeItemLogger extends JavaPlugin implements Listener {
 
     @Override
     public void onDisable() {
+        // 플레이어 매핑 저장
+        savePlayerMapping();
         getLogger().info("AdminActionLogger가 비활성화되었습니다.");
     }
     
@@ -112,6 +137,11 @@ public class CreativeItemLogger extends JavaPlugin implements Listener {
         logGameModeChanges = getConfig().getBoolean("log-gamemode-changes", true);
         logItemTransfers = getConfig().getBoolean("log-item-transfers", true);
         logSensitiveCommands = getConfig().getBoolean("log-sensitive-commands", true);
+        
+        // 플레이어별 로그 설정
+        playerSpecificLogs = getConfig().getBoolean("player-specific-logs", true);
+        playerLogsDirectory = getConfig().getString("player-logs.directory", "players");
+        playerLogsFilename = getConfig().getString("player-logs.filename", "actions.log");
     }
     
     private void setupLogFile() {
@@ -122,7 +152,7 @@ public class CreativeItemLogger extends JavaPlugin implements Listener {
             dataFolder.mkdirs();
         }
         
-        logFile = new File(dataFolder, "admin-actions.log");
+        logFile = new File(dataFolder, getConfig().getString("log-file.filename", "admin-actions.log"));
         try {
             if (!logFile.exists()) {
                 logFile.createNewFile();
@@ -130,6 +160,89 @@ public class CreativeItemLogger extends JavaPlugin implements Listener {
         } catch (IOException e) {
             getLogger().severe("로그 파일을 생성할 수 없습니다: " + e.getMessage());
         }
+    }
+    
+    private void setupPlayerMappingFile() {
+        if (!playerSpecificLogs) return;
+        
+        File dataFolder = getDataFolder();
+        if (!dataFolder.exists()) {
+            dataFolder.mkdirs();
+        }
+        
+        playersMappingFile = new File(dataFolder, "player-mapping.txt");
+        try {
+            if (!playersMappingFile.exists()) {
+                playersMappingFile.createNewFile();
+            }
+        } catch (IOException e) {
+            getLogger().severe("플레이어 매핑 파일을 생성할 수 없습니다: " + e.getMessage());
+        }
+    }
+    
+    private void loadPlayerMapping() {
+        if (!playerSpecificLogs || playersMappingFile == null || !playersMappingFile.exists()) return;
+        
+        try {
+            List<String> lines = Files.readAllLines(playersMappingFile.toPath(), StandardCharsets.UTF_8);
+            for (String line : lines) {
+                String[] parts = line.split(":");
+                if (parts.length == 2) {
+                    try {
+                        UUID uuid = UUID.fromString(parts[0]);
+                        String name = parts[1];
+                        playerNameCache.put(uuid, name);
+                    } catch (IllegalArgumentException e) {
+                        getLogger().warning("잘못된 UUID 형식: " + parts[0]);
+                    }
+                }
+            }
+            getLogger().info(playerNameCache.size() + "명의 플레이어 매핑 데이터를 로드했습니다.");
+        } catch (IOException e) {
+            getLogger().severe("플레이어 매핑 파일을 로드할 수 없습니다: " + e.getMessage());
+        }
+    }
+    
+    private void savePlayerMapping() {
+        if (!playerSpecificLogs || playersMappingFile == null) return;
+        
+        try (PrintWriter writer = new PrintWriter(new FileWriter(playersMappingFile, false))) {
+            for (Map.Entry<UUID, String> entry : playerNameCache.entrySet()) {
+                writer.println(entry.getKey() + ":" + entry.getValue());
+            }
+            getLogger().info(playerNameCache.size() + "명의 플레이어 매핑 데이터를 저장했습니다.");
+        } catch (IOException e) {
+            getLogger().severe("플레이어 매핑 파일을 저장할 수 없습니다: " + e.getMessage());
+        }
+    }
+    
+    private void updatePlayerMapping(UUID uuid, String name) {
+        playerNameCache.put(uuid, name);
+    }
+    
+    private File getPlayerLogFile(UUID playerId) {
+        if (!playerSpecificLogs) return null;
+        
+        String playerName = playerNameCache.getOrDefault(playerId, "unknown");
+        File playerDir = new File(getDataFolder(), playerLogsDirectory + File.separator + playerId.toString());
+        
+        if (!playerDir.exists()) {
+            playerDir.mkdirs();
+        }
+        
+        // 최상위에 UUID 정보 파일 생성
+        File uuidInfoFile = new File(playerDir, "info.txt");
+        if (!uuidInfoFile.exists()) {
+            try (PrintWriter writer = new PrintWriter(new FileWriter(uuidInfoFile))) {
+                writer.println("UUID: " + playerId);
+                writer.println("Username: " + playerName);
+                writer.println("First logged: " + dateFormat.format(new Date()));
+            } catch (IOException e) {
+                getLogger().severe("플레이어 정보 파일을 생성할 수 없습니다: " + e.getMessage());
+            }
+        }
+        
+        return new File(playerDir, playerLogsFilename);
     }
     
     private void writeToLog(String message) {
@@ -143,6 +256,19 @@ public class CreativeItemLogger extends JavaPlugin implements Listener {
             } catch (IOException e) {
                 getLogger().severe("로그를 파일에 쓸 수 없습니다: " + e.getMessage());
             }
+        }
+    }
+    
+    private void writeToPlayerLog(UUID playerId, String message) {
+        if (!playerSpecificLogs) return;
+        
+        File playerLogFile = getPlayerLogFile(playerId);
+        if (playerLogFile == null) return;
+        
+        try (PrintWriter writer = new PrintWriter(new FileWriter(playerLogFile, true))) {
+            writer.println(message);
+        } catch (IOException e) {
+            getLogger().severe("플레이어 로그를 파일에 쓸 수 없습니다: " + e.getMessage());
         }
     }
     
@@ -174,6 +300,36 @@ public class CreativeItemLogger extends JavaPlugin implements Listener {
     private boolean shouldMonitorWorld(String worldName) {
         return monitoredWorlds.isEmpty() || monitoredWorlds.contains(worldName);
     }
+    
+    // 플레이어별 로그 디렉토리 가져오기
+    public File getPlayerLogDirectory(UUID playerId) {
+        return new File(getDataFolder(), playerLogsDirectory + File.separator + playerId.toString());
+    }
+    
+    // 플레이어 이름으로 UUID 가져오기
+    public UUID getPlayerUUID(String playerName) {
+        for (Map.Entry<UUID, String> entry : playerNameCache.entrySet()) {
+            if (entry.getValue().equalsIgnoreCase(playerName)) {
+                return entry.getKey();
+            }
+        }
+        return null;
+    }
+    
+    // UUID로 플레이어 이름 가져오기
+    public String getPlayerName(UUID uuid) {
+        return playerNameCache.getOrDefault(uuid, null);
+    }
+    
+    // 모니터링된 모든 플레이어 UUID 목록 가져오기
+    public List<UUID> getAllMonitoredPlayerUUIDs() {
+        return new ArrayList<>(playerNameCache.keySet());
+    }
+    
+    // 플레이어별 로그 활성화 여부 확인
+    public boolean isPlayerSpecificLogsEnabled() {
+        return playerSpecificLogs;
+    }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onPlayerJoin(PlayerJoinEvent event) {
@@ -185,6 +341,12 @@ public class CreativeItemLogger extends JavaPlugin implements Listener {
                     player.getAddress().getAddress().getHostAddress(),
                     formatLocation(player.getLocation()));
             writeToLog(message);
+            
+            // 플레이어별 로그에도 기록
+            writeToPlayerLog(player.getUniqueId(), message);
+            
+            // 플레이어 매핑 업데이트
+            updatePlayerMapping(player.getUniqueId(), player.getName());
             
             // 인벤토리 저장
             if (detailedLogging && logItemTransfers) {
@@ -202,6 +364,9 @@ public class CreativeItemLogger extends JavaPlugin implements Listener {
                     player.getName(),
                     formatLocation(player.getLocation()));
             writeToLog(message);
+            
+            // 플레이어별 로그에도 기록
+            writeToPlayerLog(player.getUniqueId(), message);
             
             // 플레이어가 나가면 인벤토리 기록 삭제
             if (detailedLogging && logItemTransfers) {
@@ -223,6 +388,10 @@ public class CreativeItemLogger extends JavaPlugin implements Listener {
                     event.getNewGameMode().toString(),
                     formatLocation(player.getLocation()));
             writeToLog(message);
+            
+            // 플레이어별 로그에도 기록
+            writeToPlayerLog(player.getUniqueId(), message);
+            
             executeCommands(player, "게임모드 변경", player.getGameMode() + " -> " + event.getNewGameMode(), 1);
         }
     }
@@ -327,6 +496,9 @@ public class CreativeItemLogger extends JavaPlugin implements Listener {
                     formatLocation(player.getLocation()));
             writeToLog(message);
             
+            // 플레이어별 로그에도 기록
+            writeToPlayerLog(player.getUniqueId(), message);
+            
             // 명령어 실행
             executeCommands(player, "명령어 사용", event.getMessage(), 1);
         }
@@ -350,6 +522,9 @@ public class CreativeItemLogger extends JavaPlugin implements Listener {
                 formatLocation(player.getLocation()));
         
         writeToLog(message);
+        
+        // 플레이어별 로그에도 기록
+        writeToPlayerLog(player.getUniqueId(), message);
         
         // 명령어 실행
         executeCommands(player, action, itemName, amount);
@@ -422,6 +597,9 @@ public class CreativeItemLogger extends JavaPlugin implements Listener {
                                     current.getAmount(),
                                     formatLocation(player.getLocation()));
                             writeToLog(message);
+                            
+                            // 플레이어별 로그에도 기록
+                            writeToPlayerLog(player.getUniqueId(), message);
                         }
                     }
                 }

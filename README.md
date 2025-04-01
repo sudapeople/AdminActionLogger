@@ -19,6 +19,11 @@
   * 디스코드 및 게임 내 알림
   * 날짜, 시간, 플레이어, 아이템, 위치 등 상세 정보
 
+* **플레이어별 개별 로그 기록**
+  * 플레이어 UUID 기반 디렉토리 구조
+  * 플레이어별 행동 전용 로그 파일
+  * 직관적인 플레이어 로그 조회 명령어
+
 * **인벤토리 변화 감지**
   * 관리자의 인벤토리 변화 감지
   * 서바이벌 모드에서 새 아이템 획득 로깅
@@ -44,6 +49,14 @@ enable-logging: true
 # 디버그 모드 - 문제 해결 시 활성화
 debug-mode: false
 
+# 플레이어별 개별 로그 파일 생성
+player-specific-logs: true
+
+# 플레이어 로그 설정
+player-logs:
+  directory: "players"
+  filename: "actions.log"
+
 # 모니터링할 플레이어 목록 (비워두면 OP와 gamemode 권한이 있는 모든 플레이어 감시)
 monitored-players:
   - "ServerAdmin1" 
@@ -53,6 +66,23 @@ monitored-players:
 commands-to-execute:
   - "broadcast &c[알림] &f%player%님이 크리에이티브 모드에서 &e%item% x%amount%&f을(를) %action%했습니다."
   - "discord broadcast `%player%`가 크리에이티브 모드에서 **%item% x%amount%**을(를) %action%했습니다."
+```
+
+## 📁 플레이어별 로그 구조
+
+플레이어별 로그는 다음과 같은 디렉토리 구조로 저장됩니다:
+
+```
+plugins/AdminActionLogger/
+├── admin-actions.log     # 모든 액션이 기록된 전체 로그
+├── player-mapping.txt    # UUID와 플레이어 이름 매핑 정보
+└── players/              # 플레이어별 로그 디렉토리
+    ├── 00000000-0000-0000-0000-000000000000/  # 플레이어 UUID 디렉토리
+    │   ├── info.txt      # 플레이어 UUID 및 기본 정보
+    │   └── actions.log   # 해당 플레이어의 모든 액션 로그
+    └── 11111111-1111-1111-1111-111111111111/
+        ├── info.txt
+        └── actions.log
 ```
 
 ## 🛠️ 명령어
@@ -65,6 +95,8 @@ commands-to-execute:
 * `/clog debug` - 디버그 모드 활성화/비활성화
 * `/clog logs view` - 최근 로그 요약 보기
 * `/clog logs clear` - 로그 파일 초기화
+* `/clog logs player <플레이어>` - 특정 플레이어의 로그 확인
+* `/clog logs list` - 로그가 기록된 플레이어 목록 확인
 * `/clog monitor <add|remove> <플레이어>` - 모니터링 대상 추가/제거
 
 ## 📋 권한

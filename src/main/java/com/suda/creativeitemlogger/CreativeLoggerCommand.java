@@ -9,12 +9,19 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileReader;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
+import java.util.UUID;
+import java.util.stream.Collectors;
 
 public class CreativeLoggerCommand implements CommandExecutor, TabCompleter {
 
@@ -80,14 +87,25 @@ public class CreativeLoggerCommand implements CommandExecutor, TabCompleter {
                 break;
                 
             case "logs":
-                if (args.length > 1 && args[1].equalsIgnoreCase("view")) {
-                    sendLogSummary(sender);
-                    return true;
-                }
-                
-                if (args.length > 1 && args[1].equalsIgnoreCase("clear")) {
-                    clearLogs(sender);
-                    return true;
+                if (args.length > 1) {
+                    switch (args[1].toLowerCase()) {
+                        case "view":
+                            sendLogSummary(sender);
+                            return true;
+                        case "clear":
+                            clearLogs(sender);
+                            return true;
+                        case "player":
+                            if (args.length < 3) {
+                                sender.sendMessage(Component.text("사용법: /clog logs player <플레이어이름>").color(NamedTextColor.RED));
+                                return true;
+                            }
+                            viewPlayerLogs(sender, args[2]);
+                            return true;
+                        case "list":
+                            listLoggedPlayers(sender);
+                            return true;
+                    }
                 }
                 
                 sender.sendMessage(
@@ -97,6 +115,14 @@ public class CreativeLoggerCommand implements CommandExecutor, TabCompleter {
                 sender.sendMessage(
                     Component.text("/clog logs clear").color(NamedTextColor.YELLOW)
                         .append(Component.text(" - 로그 파일 초기화 (주의: 복구 불가)").color(NamedTextColor.WHITE))
+                );
+                sender.sendMessage(
+                    Component.text("/clog logs player <플레이어>").color(NamedTextColor.YELLOW)
+                        .append(Component.text(" - 특정 플레이어의 로그 확인").color(NamedTextColor.WHITE))
+                );
+                sender.sendMessage(
+                    Component.text("/clog logs list").color(NamedTextColor.YELLOW)
+                        .append(Component.text(" - 로그가 기록된 플레이어 목록 확인").color(NamedTextColor.WHITE))
                 );
                 break;
                 
@@ -163,6 +189,14 @@ public class CreativeLoggerCommand implements CommandExecutor, TabCompleter {
                 .append(Component.text(" - 최근 로그 확인").color(NamedTextColor.WHITE))
         );
         sender.sendMessage(
+            Component.text("/clog logs player <플레이어>").color(NamedTextColor.YELLOW)
+                .append(Component.text(" - 특정 플레이어의 로그 확인").color(NamedTextColor.WHITE))
+        );
+        sender.sendMessage(
+            Component.text("/clog logs list").color(NamedTextColor.YELLOW)
+                .append(Component.text(" - 로그가 기록된 플레이어 목록 확인").color(NamedTextColor.WHITE))
+        );
+        sender.sendMessage(
             Component.text("/clog monitor <add|remove> <플레이어>").color(NamedTextColor.YELLOW)
                 .append(Component.text(" - 모니터링 대상 추가/제거").color(NamedTextColor.WHITE))
         );
@@ -197,6 +231,16 @@ public class CreativeLoggerCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(Component.text("모니터링 대상: ").color(NamedTextColor.GREEN)
                 .append(Component.text(String.join(", ", monitoredPlayers)).color(NamedTextColor.WHITE)));
         }
+        
+        // 플레이어별 로깅 상태 추가
+        boolean playerSpecificLogs = plugin.isPlayerSpecificLogsEnabled();
+        Component playerLogsComponent = Component.text("플레이어별 로그: ").color(NamedTextColor.GREEN);
+        if (playerSpecificLogs) {
+            playerLogsComponent = playerLogsComponent.append(Component.text("활성화").color(NamedTextColor.GREEN).decorate(TextDecoration.BOLD));
+        } else {
+            playerLogsComponent = playerLogsComponent.append(Component.text("비활성화").color(NamedTextColor.GRAY));
+        }
+        sender.sendMessage(playerLogsComponent);
         
         // 활성화된 기능
         List<Component> enabledFeatures = new ArrayList<>();
@@ -251,10 +295,28 @@ public class CreativeLoggerCommand implements CommandExecutor, TabCompleter {
         
         sender.sendMessage(Component.text("===== 최근 로그 요약 =====").color(NamedTextColor.GREEN));
         
-        // 이 부분은 실제로 로그 파일에서 최근 로그 일부를 읽어 표시하는 코드를 구현해야 합니다.
-        // 여기서는 간단히 예시 메시지만 표시합니다.
-        String currentDate = new SimpleDateFormat("yyyy-MM-dd").format(new Date());
-        sender.sendMessage(Component.text("오늘 로그 파일: " + currentDate).color(NamedTextColor.YELLOW));
+        // 로그 파일에서 최근 10줄 읽기
+        try (BufferedReader reader = new BufferedReader(new FileReader(logFile))) {
+            List<String> lines = new ArrayList<>();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                lines.add(line);
+                if (lines.size() > 10) { // 최근 10줄만 유지
+                    lines.remove(0);
+                }
+            }
+            
+            if (lines.isEmpty()) {
+                sender.sendMessage(Component.text("로그 파일이 비어있습니다.").color(NamedTextColor.YELLOW));
+            } else {
+                for (String logLine : lines) {
+                    sender.sendMessage(Component.text(logLine).color(NamedTextColor.WHITE));
+                }
+            }
+        } catch (IOException e) {
+            sender.sendMessage(Component.text("로그 파일 읽기 오류: " + e.getMessage()).color(NamedTextColor.RED));
+        }
+        
         sender.sendMessage(Component.text("전체 로그는 서버 콘솔이나 로그 파일에서 확인하세요.").color(NamedTextColor.GRAY));
         sender.sendMessage(Component.text("로그 파일 위치: plugins/AdminActionLogger/admin-actions.log").color(NamedTextColor.GRAY));
     }
@@ -280,6 +342,129 @@ public class CreativeLoggerCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(Component.text("로그 파일을 삭제할 수 없습니다.").color(NamedTextColor.RED));
         }
     }
+    
+    private void viewPlayerLogs(CommandSender sender, String playerName) {
+        if (!plugin.isPlayerSpecificLogsEnabled()) {
+            sender.sendMessage(Component.text("플레이어별 로그 기능이 비활성화되어 있습니다.").color(NamedTextColor.RED));
+            return;
+        }
+        
+        UUID playerUUID = plugin.getPlayerUUID(playerName);
+        if (playerUUID == null) {
+            sender.sendMessage(Component.text("해당 플레이어의 로그 정보를 찾을 수 없습니다.").color(NamedTextColor.RED));
+            return;
+        }
+        
+        File playerLogDir = plugin.getPlayerLogDirectory(playerUUID);
+        File playerLogFile = new File(playerLogDir, plugin.getConfig().getString("player-logs.filename", "actions.log"));
+        
+        if (!playerLogFile.exists() || !playerLogFile.canRead()) {
+            sender.sendMessage(Component.text("해당 플레이어의 로그 파일이 존재하지 않습니다.").color(NamedTextColor.YELLOW));
+            return;
+        }
+        
+        sender.sendMessage(Component.text("===== " + playerName + "님의 최근 로그 =====").color(NamedTextColor.GREEN));
+        
+        // 플레이어 로그 파일에서 최근 10줄 읽기
+        try (BufferedReader reader = new BufferedReader(new FileReader(playerLogFile))) {
+            List<String> lines = new ArrayList<>();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                lines.add(line);
+                if (lines.size() > 10) { // 최근 10줄만 유지
+                    lines.remove(0);
+                }
+            }
+            
+            if (lines.isEmpty()) {
+                sender.sendMessage(Component.text("로그 파일이 비어있습니다.").color(NamedTextColor.YELLOW));
+            } else {
+                for (String logLine : lines) {
+                    sender.sendMessage(Component.text(logLine).color(NamedTextColor.WHITE));
+                }
+            }
+        } catch (IOException e) {
+            sender.sendMessage(Component.text("로그 파일 읽기 오류: " + e.getMessage()).color(NamedTextColor.RED));
+        }
+        
+        // 플레이어 정보 파일 표시
+        File playerInfoFile = new File(playerLogDir, "info.txt");
+        if (playerInfoFile.exists() && playerInfoFile.canRead()) {
+            sender.sendMessage(Component.text("===== 플레이어 정보 =====").color(NamedTextColor.GREEN));
+            try (BufferedReader reader = new BufferedReader(new FileReader(playerInfoFile))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    sender.sendMessage(Component.text(line).color(NamedTextColor.WHITE));
+                }
+            } catch (IOException e) {
+                sender.sendMessage(Component.text("정보 파일 읽기 오류: " + e.getMessage()).color(NamedTextColor.RED));
+            }
+        }
+        
+        sender.sendMessage(Component.text("전체 로그는 다음 경로에서 확인하세요:").color(NamedTextColor.GRAY));
+        sender.sendMessage(Component.text("plugins/AdminActionLogger/players/" + playerUUID + "/actions.log").color(NamedTextColor.GRAY));
+    }
+    
+    private void listLoggedPlayers(CommandSender sender) {
+        if (!plugin.isPlayerSpecificLogsEnabled()) {
+            sender.sendMessage(Component.text("플레이어별 로그 기능이 비활성화되어 있습니다.").color(NamedTextColor.RED));
+            return;
+        }
+        
+        sender.sendMessage(Component.text("===== 로그가 기록된 플레이어 목록 =====").color(NamedTextColor.GREEN));
+        
+        List<UUID> playerUUIDs = plugin.getAllMonitoredPlayerUUIDs();
+        if (playerUUIDs.isEmpty()) {
+            sender.sendMessage(Component.text("현재 기록된 플레이어가 없습니다.").color(NamedTextColor.YELLOW));
+            return;
+        }
+        
+        for (UUID uuid : playerUUIDs) {
+            String playerName = plugin.getPlayerName(uuid);
+            if (playerName != null) {
+                File playerLogDir = plugin.getPlayerLogDirectory(uuid);
+                if (playerLogDir.exists()) {
+                    long totalSize = calculateDirSize(playerLogDir);
+                    sender.sendMessage(
+                        Component.text(playerName).color(NamedTextColor.GREEN)
+                            .append(Component.text(" (UUID: " + uuid + ")").color(NamedTextColor.GRAY))
+                            .append(Component.text(" - 로그 크기: " + formatFileSize(totalSize)).color(NamedTextColor.WHITE))
+                    );
+                }
+            }
+        }
+        
+        sender.sendMessage(Component.text("특정 플레이어의 로그를 확인하려면 다음 명령어를 사용하세요: /clog logs player <플레이어이름>").color(NamedTextColor.GRAY));
+    }
+    
+    // 디렉토리 크기 계산
+    private long calculateDirSize(File dir) {
+        long size = 0;
+        if (dir.exists()) {
+            File[] files = dir.listFiles();
+            if (files != null) {
+                for (File file : files) {
+                    if (file.isFile()) {
+                        size += file.length();
+                    } else {
+                        size += calculateDirSize(file);
+                    }
+                }
+            }
+        }
+        return size;
+    }
+    
+    // 파일 크기 포맷
+    private String formatFileSize(long size) {
+        if (size < 1024) {
+            return size + " B";
+        } else if (size < 1024 * 1024) {
+            return String.format("%.2f KB", size / 1024.0);
+        } else {
+            return String.format("%.2f MB", size / (1024.0 * 1024));
+        }
+    }
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
@@ -293,40 +478,59 @@ public class CreativeLoggerCommand implements CommandExecutor, TabCompleter {
             ));
             return completions.stream()
                 .filter(s -> s.toLowerCase().startsWith(args[0].toLowerCase()))
-                .toList();
+                .collect(Collectors.toList());
         }
         
         if (args.length == 2) {
             if (args[0].equalsIgnoreCase("logs")) {
-                List<String> subCommands = Arrays.asList("view", "clear");
+                List<String> subCommands = Arrays.asList("view", "clear", "player", "list");
                 return subCommands.stream()
                     .filter(s -> s.toLowerCase().startsWith(args[1].toLowerCase()))
-                    .toList();
+                    .collect(Collectors.toList());
             }
             
             if (args[0].equalsIgnoreCase("monitor")) {
                 List<String> subCommands = Arrays.asList("add", "remove");
                 return subCommands.stream()
                     .filter(s -> s.toLowerCase().startsWith(args[1].toLowerCase()))
-                    .toList();
+                    .collect(Collectors.toList());
             }
         }
         
-        if (args.length == 3 && args[0].equalsIgnoreCase("monitor")) {
-            if (args[1].equalsIgnoreCase("add")) {
-                // 모니터링 대상이 아닌 온라인 플레이어 목록 반환
-                List<String> monitoredPlayers = plugin.getConfig().getStringList("monitored-players");
-                return plugin.getServer().getOnlinePlayers().stream()
-                    .map(Player::getName)
-                    .filter(name -> !monitoredPlayers.contains(name))
+        if (args.length == 3) {
+            if (args[0].equalsIgnoreCase("logs") && args[1].equalsIgnoreCase("player")) {
+                // 플레이어별 로그가 있는 플레이어 목록 반환
+                List<UUID> playerUUIDs = plugin.getAllMonitoredPlayerUUIDs();
+                List<String> playerNames = new ArrayList<>();
+                
+                for (UUID uuid : playerUUIDs) {
+                    String name = plugin.getPlayerName(uuid);
+                    if (name != null) {
+                        playerNames.add(name);
+                    }
+                }
+                
+                return playerNames.stream()
                     .filter(name -> name.toLowerCase().startsWith(args[2].toLowerCase()))
-                    .toList();
-            } else if (args[1].equalsIgnoreCase("remove")) {
-                // 모니터링 중인 플레이어 목록 반환
-                List<String> monitoredPlayers = plugin.getConfig().getStringList("monitored-players");
-                return monitoredPlayers.stream()
-                    .filter(name -> name.toLowerCase().startsWith(args[2].toLowerCase()))
-                    .toList();
+                    .collect(Collectors.toList());
+            }
+            
+            if (args[0].equalsIgnoreCase("monitor")) {
+                if (args[1].equalsIgnoreCase("add")) {
+                    // 모니터링 대상이 아닌 온라인 플레이어 목록 반환
+                    List<String> monitoredPlayers = plugin.getConfig().getStringList("monitored-players");
+                    return plugin.getServer().getOnlinePlayers().stream()
+                        .map(Player::getName)
+                        .filter(name -> !monitoredPlayers.contains(name))
+                        .filter(name -> name.toLowerCase().startsWith(args[2].toLowerCase()))
+                        .collect(Collectors.toList());
+                } else if (args[1].equalsIgnoreCase("remove")) {
+                    // 모니터링 중인 플레이어 목록 반환
+                    List<String> monitoredPlayers = plugin.getConfig().getStringList("monitored-players");
+                    return monitoredPlayers.stream()
+                        .filter(name -> name.toLowerCase().startsWith(args[2].toLowerCase()))
+                        .collect(Collectors.toList());
+                }
             }
         }
         

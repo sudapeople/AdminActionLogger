@@ -1,10 +1,76 @@
-# CreativeItemLogger 설정 파일
+# AdminActionLogger 설정 파일
+# 관리자 행동 감지 및 로깅 플러그인 설정
 
-# 로깅 기능 활성화 여부
+# ===== 기본 설정 =====
+
+# 로깅 기능 활성화 여부 (true/false)
 enable-logging: true
+
+# 디버그 모드 - 문제 해결 시 활성화 (true/false)
+debug-mode: false
 
 # 날짜 형식 (Java SimpleDateFormat 패턴)
 date-format: "yyyy-MM-dd HH:mm:ss"
+
+# ===== 로깅 대상 설정 =====
+
+# 모니터링할 플레이어 목록 (비워두면 OP와 gamemode 권한이 있는 모든 플레이어 감시)
+monitored-players:
+  - "ServerAdmin1" 
+  - "ModeratorUser"
+  - "BuildTeamLead"
+
+# 로깅에서 제외할 플레이어 목록
+exempt-players:
+  - "OwnerUser"  # 서버 주인은 제외
+  - "TrustedAdmin"
+
+# 로깅을 적용할 월드 목록 (비워두면 모든 월드 적용)
+worlds:
+  - "world"
+  - "world_nether"
+  - "world_the_end"
+  - "creative_world"
+  - "event_zone"
+
+# ===== 로깅 옵션 =====
+
+# 로그 파일에 기록 여부 (true/false)
+log-to-file: true
+
+# 플레이어별 개별 로그 파일 생성 (true/false)
+player-specific-logs: true
+
+# 플레이어 로그 파일 설정
+player-logs:
+  # 플레이어 로그 디렉토리 (plugins/AdminActionLogger/ 내부 경로)
+  directory: "players"
+  # 플레이어별 로그 파일 이름 형식 (%player% 는 플레이어 이름으로 대체됨)
+  filename: "actions.log"
+  # 날짜별 로그 파일 자동 분리 (true/false)
+  daily-rotation: false
+  # 최대 로그 파일 보관 일수 (0 = 무제한)
+  max-days-to-keep: 30
+
+# 상세 로깅 - 인벤토리 변경 추적 등 (true/false)
+detailed-logging: true
+
+# 게임 모드 변경 로깅 (true/false)
+log-gamemode-changes: true
+
+# 아이템 이동 로깅 - 주웠을 때, 버렸을 때 등 (true/false)
+log-item-transfers: true
+
+# 민감한 명령어 로깅 (true/false)
+log-sensitive-commands: true
+
+# 접속/퇴장 로깅 (true/false)
+log-join-quit: true
+
+# 인벤토리 검사 주기 (틱 단위, 1200 = 1분)
+inventory-check-interval: 1200
+
+# ===== 명령어 실행 설정 =====
 
 # 로그 발생 시 실행할 명령어 목록
 # 사용 가능한 플레이스홀더:
@@ -12,17 +78,85 @@ date-format: "yyyy-MM-dd HH:mm:ss"
 # %item% - 아이템 이름
 # %amount% - 아이템 수량
 # %time% - 시간 (위 date-format에서 지정한 형식)
+# %action% - 수행한 행동 (복사, 생성, 드롭 등)
+# %location% - 플레이어의 위치
 commands-to-execute:
-  - "discord broadcast **%player%**가 크리에이티브 모드에서 **%item% x%amount%**을(를) 복사했습니다."
-  - "say %player%님이 크리에이티브 모드에서 %item% x%amount%을(를) 복사했습니다."
-  - "broadcast &c[알림] &f%player%님이 크리에이티브 모드에서 &e%item% x%amount%&f을(를) 복사했습니다."
-  
-# 로깅을 적용할 월드 목록 (비워두면 모든 월드 적용)
-worlds:
-  - "world"
-  - "world_creative"
-  
-# 로깅에서 제외할 플레이어 목록 (권한 대신 특정 플레이어 이름으로 제외)
-exempt-players:
-  - "AdminPlayer1"
-  - "AdminPlayer2"
+  - "broadcast &c[알림] &f%player%님이 크리에이티브 모드에서 &e%item% x%amount%&f을(를) %action%했습니다."
+  - "discord broadcast `%player%`가 크리에이티브 모드에서 **%item% x%amount%**을(를) %action%했습니다. (`%location%`)"
+
+# ===== 민감한 명령어 설정 =====
+
+# 민감한 명령어 목록 (이 명령어들이 사용될 때 로그 남김)
+sensitive-commands:
+  - "gamemode"
+  - "gm"
+  - "give"
+  - "item"
+  - "i"
+  - "op"
+  - "deop"
+  - "clear"
+  - "kill"
+  - "ban"
+  - "kick"
+  - "mute"
+  - "tempban"
+  - "fill"
+  - "clone"
+  - "execute"
+  - "effect"
+  - "enchant"
+  - "xp"
+  - "experience"
+  - "teleport"
+  - "tp"
+  - "say"
+  - "me"
+  - "tell"
+  - "w"
+  - "msg"
+
+# ===== 추가 설정 =====
+
+# 관리자 전용 알림 (true로 설정하면 일반 플레이어에게는 알림이 표시되지 않음)
+admin-only-notifications: false
+
+# 관리자 알림을 받을 플레이어 목록 (admin-only-notifications가 true일 때 사용)
+notification-receivers:
+  - "OwnerUser"
+
+# 로그 파일 설정
+log-file:
+  # 로그 파일 이름
+  filename: "admin-actions.log"
+  # 날짜별 로그 파일 자동 분리 (true/false)
+  daily-rotation: true
+  # 최대 로그 파일 보관 일수 (0 = 무제한)
+  max-days-to-keep: 30
+
+# 특수 아이템 모니터링 (이 아이템들이 관련된 행동은 항상 로깅)
+special-items:
+  - "COMMAND_BLOCK"
+  - "STRUCTURE_BLOCK"
+  - "BARRIER"
+  - "SPAWNER"
+  - "DRAGON_EGG"
+  - "BEACON"
+  - "ELYTRA"
+  - "ENCHANTED_GOLDEN_APPLE"
+  - "END_PORTAL_FRAME"
+
+# 특수 위치 모니터링 (이 좌표 근처에서의 행동은 항상 로깅)
+special-locations:
+  spawn:
+    world: "world"
+    x: 0
+    y: 64
+    z: 0
+    radius: 50
+  server-room:
+    world: "world"
+    x: 500
+    y: 64
+    z: 500
+    radius: 20
